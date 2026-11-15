@@ -1,5 +1,5 @@
 module Models.Section
-  ( Section(Section, body, name, number)
+  ( Section(Section, body, name, number, references)
   , SectionName
   , SectionNumber
   , SectionBody
@@ -19,13 +19,18 @@ import           Text.InterpolatedString.Perl6  ( qq )
 import           HtmlUtil                       ( Html
                                                 , toText
                                                 )
+import           Models.References              ( SectionReference )
 import           TextUtil
 
 data Section =
   Section {
-    name   :: SectionName,
-    number :: SectionNumber,
-    body   :: SectionBody
+    name       :: SectionName,
+    number     :: SectionNumber,
+    body       :: SectionBody,
+    -- In-NRS-domain links extracted from the body, in stable document
+    -- order. Existing JSON fields keep their names and order; this is
+    -- only an appended field.
+    references :: [SectionReference]
 } deriving (Generic, Show)
 
 maxNameLen :: Int
@@ -60,7 +65,7 @@ toSectionNumber n context
   | actualLen > maxNumberLen || actualLen == 0 || not (T.isInfixOf "." n) = Left
     [qq| Section number must be 1..$maxNumberLen characters and have a dot: "$n"  context: $context |]
   | otherwise = Right $ MakeSectionNumber n
-  where 
+  where
     actualLen = T.length n
 
 
@@ -79,7 +84,7 @@ parseName :: Text -> Text
 parseName = normalizeWhiteSpace . removeAnnotation
   where removeAnnotation = T.takeWhile isLegalNameChar
 
-  
+
 isLegalNameChar :: Char -> Bool
 isLegalNameChar c = c /= '['
 

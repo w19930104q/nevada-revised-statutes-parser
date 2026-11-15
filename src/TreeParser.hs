@@ -13,6 +13,8 @@ import qualified Data.Text                     as T
 import           Text.InterpolatedString.Perl6  ( qq )
 
 import           ChapterFile                    ( ChapterMap
+                                                , buildReferenceRegistry
+                                                , enrichChapterReferences
                                                 , parseChapter
                                                 )
 import           Config
@@ -24,25 +26,30 @@ import           Models.ParseFailure            ( ParseResult
                                                 , parseFailure
                                                 )
 import           Models.Tree
+import qualified ReferenceParser               as References
 import           Util                           ( (|>) )
 
 
 parseTree :: Html -> ChapterMap -> ParseResult Tree
 parseTree indexFile chapterMap = do
-  chapter0' <- parseChapterZero chapterMap
+  let registry = buildReferenceRegistry chapterMap
+  chapter0' <- parseChapterZero chapterMap registry
   titles' <- parseTitlesAndChapters indexFile (allButChapterZero chapterMap)
   pure Tree { chapter0 = chapter0', titles = titles' }
 
 
-parseChapterZero :: ChapterMap -> ParseResult Chapter
-parseChapterZero chapterMap =
+parseChapterZero
+  :: ChapterMap -> References.AnchorRegistry -> ParseResult Chapter
+parseChapterZero chapterMap registry =
   let fallback msg = do
         tell [parseFailure "NRS-000.html" msg |> atChapter "0"]
         pure emptyChapterZero
   in  case HM.lookup chapterZeroPathname chapterMap of
         Just html -> case runWriterT (parseChapter html) of
           Left message -> fallback (T.pack message)
-          Right result -> writer result
+          Right result ->
+            writer result
+              >>= enrichChapterReferences registry chapterZeroPathname
         Nothing -> fallback
           [qq|Chap. Zero not found in {show $ take 1 $ HM.keys chapterMap}|]
 

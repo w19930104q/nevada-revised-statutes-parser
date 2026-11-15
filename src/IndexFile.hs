@@ -22,6 +22,7 @@ import           Text.Parser.Combinators
 import           Text.Parser.Token
 
 import           ChapterFile                    ( ChapterMap
+                                                , buildReferenceRegistry
                                                 , fillInEmptyChapter
                                                 )
 import           FileUtil                       ( toAbsoluteURL )
@@ -35,6 +36,7 @@ import           Models.ParseFailure            ( ParseFailure
                                                 , parseFailure
                                                 )
 import           Models.Title                  as Title
+import qualified ReferenceParser               as References
 import           TextUtil                       ( normalizeWhiteSpace
                                                 , titleize
                                                 )
@@ -46,13 +48,16 @@ parseTitlesAndChapters indexHtml chapterMap =
     Left message -> tell [parseFailure "index.html" (T.pack message)] >> pure []
     Right result -> do
       emptyTitles <- writer result
-      mapM (fillInEmptyTitle chapterMap) emptyTitles
+      let registry = buildReferenceRegistry chapterMap
+      mapM (fillInEmptyTitle chapterMap registry) emptyTitles
 
 
-fillInEmptyTitle :: ChapterMap -> Title -> ParseResult Title
-fillInEmptyTitle chapterMap emptyTitle =
+fillInEmptyTitle
+  :: ChapterMap -> References.AnchorRegistry -> Title -> ParseResult Title
+fillInEmptyTitle chapterMap registry emptyTitle =
   censor (fmap (atTitle (Title.number emptyTitle))) $ do
-    filledChapters <- mapM (fillInEmptyChapter chapterMap) (chapters emptyTitle)
+    filledChapters <-
+      mapM (fillInEmptyChapter chapterMap registry) (chapters emptyTitle)
     pure emptyTitle { Title.chapters = filledChapters }
 
 

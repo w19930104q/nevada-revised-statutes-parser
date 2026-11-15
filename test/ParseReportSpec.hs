@@ -119,7 +119,7 @@ goodSection =
        , toSectionBody (makeHtml "<p>body</p>") "ctx"
        ) of
     (Right n, Right num, Right b) ->
-      Section { name = n, number = num, body = b }
+      Section { name = n, number = num, body = b, references = [] }
     _ -> error "fixture section constructors failed"
 
 

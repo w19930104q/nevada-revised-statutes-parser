@@ -92,5 +92,8 @@ toRelativePath :: FilePath -> RelativePath
 toRelativePath p | isRelative p = MakeRelativePath p
                  | otherwise    = error "Not a relative path"
 
+relativeToFilePath :: RelativePath -> FilePath
+relativeToFilePath (MakeRelativePath fp) = fp
+
 (./) :: FilePath -> RelativePath
 (./) = toRelativePath

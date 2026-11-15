@@ -1,4 +1,16 @@
-module ChapterFile where
+module ChapterFile
+  ( ChapterMap
+  , buildReferenceRegistry
+  , chapterNumberToFilename
+  , chapterNumberToFilenameText
+  , enrichChapterReferences
+  , fillInEmptyChapter
+  , makeChapterData
+  , parseChapter
+  , parseChapterFileTitle
+  , subChapterHeadingGroups
+  )
+where
 
 import           BasicPrelude
 import           Control.Monad.Writer.Strict    ( censor
@@ -29,10 +41,12 @@ import           HtmlUtil                       ( Html
                                                 , titleText
                                                 , toText
                                                 )
+import qualified ReferenceParser               as References
 import qualified SimpleChapterFile              ( parseSectionsFromJustHtml
                                                 , parseSectionsFromHeadingGroup
                                                 , isSimpleSubChapter
                                                 )
+import           SimpleChapterFile              ( attachSectionReferences )
 import           Models.Chapter                as Chapter
 import           Models.ParseFailure            ( ParseResult
                                                 , ParseResultT
@@ -52,9 +66,6 @@ import           Util                           ( (|>) )
 type ChapterMap = HashMap RelativePath Html
 
 
-leadlineP :: String
-leadlineP = "<p class=COLeadline>"
-
 heading2P :: String
 heading2P = "<p class=COHead2>"
 
@@ -65,8 +76,9 @@ horizontalRule :: String
 horizontalRule = "<p class=J-Dash"
 
 
-fillInEmptyChapter :: ChapterMap -> Chapter -> ParseResult Chapter
-fillInEmptyChapter chapterMap emptyChapter =
+fillInEmptyChapter
+  :: ChapterMap -> References.AnchorRegistry -> Chapter -> ParseResult Chapter
+fillInEmptyChapter chapterMap registry emptyChapter =
   let number'   = Chapter.number emptyChapter
       fileText  = chapterNumberToFilenameText number'
       key       = toRelativePath (T.unpack fileText)
@@ -76,9 +88,16 @@ fillInEmptyChapter chapterMap emptyChapter =
         then fallback "skipped by Config.chaptersToSkip"
         else case HM.lookup key chapterMap of
           Just html -> case runWriterT (parseChapter html) of
-            Right result -> writer result
+            Right result ->
+              writer result >>= enrichChapterReferences registry key
             Left message -> fallback (T.pack message)
           Nothing -> fallback ("Chapter file not found: " ++ fileText)
+
+
+-- The anchor registry only depends on the mirrored pages, so it is
+-- built once and shared by every chapter enrichment pass.
+buildReferenceRegistry :: ChapterMap -> References.AnchorRegistry
+buildReferenceRegistry = References.buildAnchorRegistry . HM.toList
 
 
 chapterNumberToFilenameText :: Text -> Text
@@ -111,6 +130,48 @@ parseChapter chapterHtml = do
     , Chapter.url     = chapterUrlPrefix ++ rawNumber ++ ".html"
     , Chapter.content = sectionsOrSubChapters
     }
+
+
+-- Attach ordered references to every section of a parsed chapter using
+-- the shared anchor registry. Relative hrefs resolve against the
+-- chapter's own page; link diagnostics are collected without failing
+-- the enclosing section. Base-monad polymorphic so the same pass runs
+-- inside either the plain ParseResult writer or the Either-backed
+-- structural parsers.
+enrichChapterReferences
+  :: Monad m
+  => References.AnchorRegistry
+  -> RelativePath
+  -> Chapter
+  -> ParseResultT m Chapter
+enrichChapterReferences registry sourcePath chapter = do
+  content' <- enrichContent registry sourcePath (Chapter.content chapter)
+  pure chapter { Chapter.content = content' }
+
+
+enrichContent :: Monad m
+  => References.AnchorRegistry
+  -> RelativePath
+  -> ChapterContent
+  -> ParseResultT m ChapterContent
+enrichContent registry sourcePath content' = case content' of
+  SimpleChapterContent chapterSections ->
+    SimpleChapterContent
+      <$> attachSectionReferences registry sourcePath chapterSections
+  ComplexChapterContent subChapters ->
+    ComplexChapterContent <$> mapM enrichSubChapter subChapters
+ where
+  enrichSubChapter subChapter = case SubChapter.children subChapter of
+    SubChapterSections chapterSections -> do
+      sections' <- attachSectionReferences registry sourcePath chapterSections
+      pure subChapter { SubChapter.children = SubChapterSections sections' }
+    SubSubChapters subSubs -> do
+      subSubs' <- mapM enrichSubSub subSubs
+      pure subChapter { SubChapter.children = SubSubChapters subSubs' }
+  enrichSubSub subSub = do
+    sections' <-
+      attachSectionReferences registry sourcePath (SubSubChapter.sections subSub)
+    pure subSub { SubSubChapter.sections = sections' }
 
 
 makeChapterData :: Html -> ChapterData

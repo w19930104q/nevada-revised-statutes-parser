@@ -25,11 +25,13 @@ common deps
     base-unicode-symbols,
     basic-prelude,
     bytestring,
+    containers,
     directory,
     filepath,
     hspec,
     interpolatedstring-perl6,
     mtl,
+    network-uri,
     parsers,
     process,
     split,
@@ -48,6 +50,7 @@ common deps
     Models.Chapter,
     Models.NRS,
     Models.ParseFailure,
+    Models.References,
     Models.Section,
     Models.SubChapter,
     Models.SubSubChapter,
@@ -56,6 +59,7 @@ common deps
     NRSParser,
     ParseReport,
     Parsing,
+    ReferenceParser,
     SectionParser,
     SimpleChapterFile,
     TextUtil,
@@ -77,7 +81,9 @@ test-suite nrs-parser-test
                      , Models.SectionSpec
                      , NRSParserSpec
                      , ParseReportSpec
+                     , ReferenceParserSpec
                      , SectionParserSpec
+                     , SectionReferencesSpec
                      , SimpleChapterSpec
                      , TextUtilSpec
 

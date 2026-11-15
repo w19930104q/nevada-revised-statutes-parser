@@ -8,6 +8,7 @@ import           Data.Time                      ( fromGregorian )
 import           Test.Hspec
 
 import           ChapterFile                    ( chapterNumberToFilename
+                                                , buildReferenceRegistry
                                                 , fillInEmptyChapter
                                                 )
 import           Config                         ( chapterZeroPathname )
@@ -29,8 +30,10 @@ spec :: SpecWith ()
 spec = parallel $ do
   describe "fillInEmptyChapter" $ do
     it "keeps the empty shell and records a failure when the file is missing" $ do
-      let stub = emptyChapterShell "998" "Missing Chapter"
-          (ch, fails) = runWriter $ fillInEmptyChapter HM.empty stub
+      let stub     = emptyChapterShell "998" "Missing Chapter"
+          registry = buildReferenceRegistry HM.empty
+          (ch, fails) =
+            runWriter $ fillInEmptyChapter HM.empty registry stub
       Chapter.number ch `shouldBe` "998"
       Chapter.name ch `shouldBe` "Missing Chapter"
       case Chapter.content ch of
@@ -42,17 +45,20 @@ spec = parallel $ do
       chapterNumber (head fails) `shouldBe` Just "998"
 
     it "keeps the empty shell for chaptersToSkip and records a skip failure" $ do
-      let stub = emptyChapterShell "111" "Skipped"
-          (ch, fails) = runWriter $ fillInEmptyChapter HM.empty stub
+      let stub     = emptyChapterShell "111" "Skipped"
+          registry = buildReferenceRegistry HM.empty
+          (ch, fails) =
+            runWriter $ fillInEmptyChapter HM.empty registry stub
       Chapter.number ch `shouldBe` "111"
       length fails `shouldBe` 1
       message (head fails) `shouldBe` "skipped by Config.chaptersToSkip"
 
     it "returns parsed content plus section failures for broken HTML" $ do
       html <- htmlFixture "NRS-999-missing-body.html"
-      let stub = emptyChapterShell "999" "Broken"
-          cmap  = HM.singleton (chapterNumberToFilename "999") html
-          (ch, fails) = runWriter $ fillInEmptyChapter cmap stub
+      let stub     = emptyChapterShell "999" "Broken"
+          cmap     = HM.singleton (chapterNumberToFilename "999") html
+          registry = buildReferenceRegistry cmap
+          (ch, fails) = runWriter $ fillInEmptyChapter cmap registry stub
       case Chapter.content ch of
         SimpleChapterContent sections -> length sections `shouldBe` 1
         ComplexChapterContent xs ->
